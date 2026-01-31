@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>泰蘭德劇場 - 手寫風筆記本</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Ma+Shan+Zheng&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --page-bg: #d7c4a3;
+            --paper-bg: #fffbf0;
+            --ink-color: #3d3d3d;
+            --pencil-gray: #6d5d4b;
+            --accent-pink: #f8d7da;
+            --tape-color: rgba(160, 130, 100, 0.4);
+        }
+
+        body {
+            background-color: var(--page-bg);
+            background-image: 
+                linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px),
+                linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            font-family: 'Noto Sans TC', 'Ma Shan Zheng', cursive;
+            color: var(--ink-color);
+            min-height: 100vh;
+            padding: 20px 10px;
+        }
+
+        .notebook-container {
+            background: var(--paper-bg);
+            width: 100%;
+            max-width: 850px;
+            min-height: 90vh;
+            border: 2px solid var(--pencil-gray);
+            border-radius: 5px 30px 10px 25px / 10px 10px 30px 5px;
+            box-shadow: 12px 12px 0px rgba(0,0,0,0.1);
+            position: relative;
+            padding: 30px 20px;
+            margin: 0 auto;
+        }
+
+        .notebook-container::before {
+            content: "";
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%) rotate(-2deg);
+            width: 90px;
+            height: 28px;
+            background: var(--tape-color);
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+            z-index: 20;
+        }
+
+        h1 {
+            font-family: 'ZCOOL KuaiLe', cursive;
+            transform: rotate(-1deg);
+            font-size: 1.75rem;
+            color: #5d4037;
+        }
+
+        .tabs-wrapper {
+            display: flex;
+            flex-wrap: wrap; 
+            gap: 5px; 
+            margin-bottom: -2px;
+            padding-bottom: 2px;
+            position: relative;
+            z-index: 5;
+        }
+
+        .tab-button {
+            padding: 6px 12px;
+            border: 2px solid var(--pencil-gray);
+            border-radius: 10px 10px 0 0;
+            background: #e8dfcc;
+            cursor: pointer;
+            font-family: 'ZCOOL KuaiLe', cursive;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            transition: all 0.2s;
+            color: #6d5d4b;
+        }
+
+        .tab-button.active {
+            background: var(--paper-bg);
+            border-bottom-color: var(--paper-bg);
+            z-index: 10;
+            padding-bottom: 8px;
+            color: var(--ink-color);
+        }
+
+        .tab-content {
+            border: 2px solid var(--pencil-gray);
+            border-radius: 0 10px 10px 10px;
+            padding: 20px;
+            min-height: 400px;
+            background: white;
+            position: relative;
+            margin-top: -2px; 
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.02);
+        }
+
+        .buttons-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .sketch-btn {
+            display: inline-flex;
+            align-items: center;
+            border: 2px solid var(--pencil-gray);
+            padding: 8px 14px;
+            border-radius: 15px 5px 12px 5px / 5px 12px 5px 15px;
+            background: #fffcf5;
+            transition: all 0.2s;
+            font-weight: bold;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .sketch-btn:active {
+            background: #e8dfcc;
+            transform: scale(0.95);
+        }
+
+        .modal-card {
+            background: #fffbf0;
+            border: 2px solid #5d4037;
+            border-radius: 5px;
+            box-shadow: 6px 6px 0px #5d4037;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .handwritten-input {
+            border: none;
+            border-bottom: 1.5px dashed #bcaaa4;
+            background: transparent;
+            width: 100%;
+            padding: 10px 0;
+            font-family: inherit;
+            outline: none;
+            font-size: 1.25rem;
+        }
+
+        .handwritten-textarea {
+            border: 1px dashed #bcaaa4;
+            background: #fffefb;
+            width: 100%;
+            min-height: 200px;
+            padding: 12px;
+            outline: none;
+            border-radius: 8px;
+            line-height: 1.6;
+            font-size: 1rem;
+        }
+        
+        .save-btn {
+            background: #5d4037;
+            color: white;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+
+        @media (min-width: 640px) {
+            h1 { font-size: 2.25rem; }
+            .notebook-container { padding: 50px; }
+            .tab-content { padding: 40px; }
+            .modal-card { width: 100%; max-width: 600px; }
+            .tab-button { font-size: 1rem; padding: 10px 18px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="notebook-container">
+    <h1 class="mb-8 font-bold flex items-center gap-2">
+        <span>🎬</span> 泰蘭德劇場筆記
+    </h1>
+
+    <div class="tabs-wrapper" id="tabsList"></div>
+
+    <div class="tab-content" id="tabContainer">
+        <div id="buttonsGrid" class="buttons-container"></div>
+        
+        <div class="mt-10 pt-6 border-t border-dashed border-gray-200 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+            <button onclick="openAddButtonModal()" class="text-sm text-amber-900 font-bold hover:underline text-left">
+                ✎ 記錄新劇名...
+            </button>
+            <button onclick="deleteCurrentTab()" class="text-xs text-stone-400 text-left">
+                [ 刪除此標籤分頁 ]
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 編輯劇名 Modal -->
+<div id="modal" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+    <div class="modal-card p-6 relative">
+        <button onclick="closeModal()" class="absolute top-4 right-4 text-2xl p-2">✕</button>
+        <div class="mt-4 mb-4">
+            <label class="block text-[10px] text-amber-700 uppercase tracking-widest">劇名</label>
+            <input type="text" id="editTitle" class="handwritten-input">
+        </div>
+        <div class="mb-6">
+            <label class="block text-[10px] text-amber-700 uppercase tracking-widest mb-1">內容</label>
+            <textarea id="editDesc" class="handwritten-textarea"></textarea>
+        </div>
+        <div class="flex flex-col gap-4">
+            <button onclick="saveButtonEdit()" class="save-btn w-full">儲存修改 ✨</button>
+            <div class="flex justify-between items-center px-1">
+                <button onclick="deleteCurrentButton()" class="text-red-700 text-xs underline">刪除記錄</button>
+                <button onclick="closeModal()" class="text-stone-500 text-sm">取消</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新增標籤 Modal -->
+<div id="tabModal" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-card max-w-sm p-8">
+        <h3 class="text-xl font-bold mb-6 text-amber-900">新增劇場標籤</h3>
+        <input type="text" id="newTabInput" placeholder="例如: JoongDunk" class="handwritten-input mb-8">
+        <div class="flex justify-end gap-4">
+            <button onclick="closeTabModal()" class="text-stone-500">取消</button>
+            <button onclick="confirmAddTab()" class="save-btn">新增</button>
+        </div>
+    </div>
+</div>
+
+<!-- 新增劇名 Modal -->
+<div id="btnModal" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-card p-8">
+        <h3 class="text-xl font-bold mb-6 text-amber-900">新增劇名記錄</h3>
+        <input type="text" id="newBtnTitle" placeholder="輸入劇名" class="handwritten-input mb-4">
+        <textarea id="newBtnDesc" placeholder="記錄內容..." class="handwritten-textarea mb-6"></textarea>
+        <div class="flex flex-col gap-3">
+            <button onclick="confirmAddButton()" class="save-btn w-full">確認添加</button>
+            <button onclick="closeBtnModal()" class="text-stone-500 text-center text-sm">取消</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const STORAGE_KEY = 'ezpage_thai_drama_khaki_v1';
+    
+    let state = {
+        activeTab: "Off&Gun",
+        tabs: [
+            { id: "Off&Gun", name: "Off&Gun", buttons: [{ id: 1, title: "愛情的理論", desc: "暗戀天花板！" }] },
+            { id: "Tay&New", name: "Tay&New", buttons: [] },
+            { id: "Joong&Dunk", name: "Joong&Dunk", buttons: [] },
+            { id: "Boun&Prem", name: "Boun&Prem", buttons: [] },
+            { id: "Earth&Mix", name: "Earth&Mix", buttons: [] },
+            { id: "Ohm&Nanon", name: "Ohm&Nanon", buttons: [] },
+            { id: "Force&Book", name: "Force&Book", buttons: [] },
+            { id: "Aou&Boom", name: "Aou&Boom", buttons: [] },
+            { id: "Jimmy&Sea", name: "Jimmy&Sea", buttons: [] },
+            { id: "First&Khaotung", name: "First&Khaotung", buttons: [] },
+            { id: "Gemini&Fourth", name: "Gemini&Fourth", buttons: [] },
+            { id: "Perth&Chimon", name: "Perth&Chimon", buttons: [] },
+            { id: "William&Est", name: "William&Est", buttons: [] },
+            { id: "Mile&Apo", name: "Mile&Apo", buttons: [] },
+            { id: "福桃", name: "福桃", buttons: [] },
+            { id: "其他", name: "其他", buttons: [] }
+        ]
+    };
+
+    let currentEditingBtnId = null;
+
+    function init() {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed && Array.isArray(parsed.tabs)) state = parsed;
+            }
+        } catch (e) { console.error("Load state failed", e); }
+        render();
+    }
+
+    function save() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) { console.error("Save state failed", e); }
+    }
+
+    function render() {
+        const tabsList = document.getElementById('tabsList');
+        const buttonsGrid = document.getElementById('buttonsGrid');
+
+        tabsList.innerHTML = state.tabs.map(tab => `
+            <button onclick="switchTab('${tab.id}')" class="tab-button ${state.activeTab === tab.id ? 'active' : ''}">
+                ${tab.name}
+            </button>
+        `).join('') + `<button onclick="openTabModal()" class="px-3 py-1 text-amber-800 text-sm mb-1">+ 新增標籤</button>`;
+
+        const currentTab = state.tabs.find(t => t.id === state.activeTab);
+        if (currentTab) {
+            buttonsGrid.innerHTML = currentTab.buttons.map(btn => `
+                <button onclick="showBtnDetail(${btn.id})" class="sketch-btn">
+                    <span>📌 ${btn.title}</span>
+                </button>
+            `).join('');
+        }
+    }
+
+    function switchTab(id) {
+        state.activeTab = id;
+        render();
+    }
+
+    function showBtnDetail(btnId) {
+        const currentTab = state.tabs.find(t => t.id === state.activeTab);
+        const btn = currentTab.buttons.find(b => b.id === btnId);
+        if (btn) {
+            currentEditingBtnId = btnId;
+            document.getElementById('editTitle').value = btn.title;
+            document.getElementById('editDesc').value = btn.desc;
+            document.getElementById('modal').classList.remove('hidden');
+        }
+    }
+
+    function saveButtonEdit() {
+        const currentTab = state.tabs.find(t => t.id === state.activeTab);
+        const btn = currentTab.buttons.find(b => b.id === currentEditingBtnId);
+        if (btn) {
+            btn.title = document.getElementById('editTitle').value;
+            btn.desc = document.getElementById('editDesc').value;
+            closeModal();
+            save();
+            render();
+        }
+    }
+
+    function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+    function openTabModal() { document.getElementById('tabModal').classList.remove('hidden'); }
+    function closeTabModal() { document.getElementById('tabModal').classList.add('hidden'); }
+    
+    function confirmAddTab() {
+        const name = document.getElementById('newTabInput').value.trim();
+        if (name) {
+            const id = "tab_" + Date.now();
+            state.tabs.push({ id, name, buttons: [] });
+            state.activeTab = id;
+            document.getElementById('newTabInput').value = '';
+            closeTabModal();
+            save();
+            render();
+        }
+    }
+
+    function deleteCurrentTab() {
+        if (state.tabs.length <= 1) return;
+        state.tabs = state.tabs.filter(t => t.id !== state.activeTab);
+        state.activeTab = state.tabs[0].id;
+        save();
+        render();
+    }
+
+    function openAddButtonModal() { document.getElementById('btnModal').classList.remove('hidden'); }
+    function closeBtnModal() { document.getElementById('btnModal').classList.add('hidden'); }
+    
+    function confirmAddButton() {
+        const title = document.getElementById('newBtnTitle').value.trim();
+        const desc = document.getElementById('newBtnDesc').value.trim();
+        if (title) {
+            const currentTab = state.tabs.find(t => t.id === state.activeTab);
+            currentTab.buttons.push({ id: Date.now(), title, desc });
+            document.getElementById('newBtnTitle').value = '';
+            document.getElementById('newBtnDesc').value = '';
+            closeBtnModal();
+            save();
+            render();
+        }
+    }
+
+    function deleteCurrentButton() {
+        const currentTab = state.tabs.find(t => t.id === state.activeTab);
+        currentTab.buttons = currentTab.buttons.filter(b => b.id !== currentEditingBtnId);
+        closeModal();
+        save();
+        render();
+    }
+
+    window.onload = init;
+</script>
+
+</body>
+</html>
