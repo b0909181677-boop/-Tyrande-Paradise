@@ -23,14 +23,14 @@
                 linear-gradient(rgba(139, 115, 85, 0.05) 1px, transparent 1px);
             background-size: 20px 20px;
             color: var(--text-color);
-            font-family: 'Noto+Sans+TC', sans-serif;
+            font-family: 'Noto Sans TC', sans-serif;
             min-height: 100vh;
             margin: 0;
             padding: 15px;
         }
 
         .handwritten {
-            font-family: 'Ma+Shan+Zheng', cursive;
+            font-family: 'Ma Shan Zheng', cursive;
         }
 
         .notebook-container {
@@ -75,6 +75,7 @@
             margin-bottom: 25px;
             border-bottom: 2px solid var(--line-color);
             padding-bottom: 10px;
+            min-height: 45px;
         }
 
         .tab-button {
@@ -115,7 +116,7 @@
             justify-content: center;
             min-height: 80px;
             box-shadow: 2px 2px 5px rgba(0,0,0,0.03);
-            font-family: 'Ma+Shan+Zheng', cursive;
+            font-family: 'Ma Shan Zheng', cursive;
         }
 
         .drama-btn:hover {
@@ -165,7 +166,7 @@
             height: 300px;
             background: transparent;
             border: none;
-            font-family: 'Ma+Shan+Zheng', cursive;
+            font-family: 'Ma Shan Zheng', cursive;
             font-size: 1.3rem;
             line-height: 32px;
             resize: none;
@@ -178,7 +179,7 @@
             background: transparent;
             border: none;
             font-size: 1.8rem;
-            font-family: 'Ma+Shan+Zheng', cursive;
+            font-family: 'Ma Shan Zheng', cursive;
             color: var(--accent-color);
             width: 100%;
             border-bottom: 2px solid var(--accent-color);
@@ -222,6 +223,7 @@
             border-radius: 20px;
             font-size: 0.75rem;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 2000;
         }
     </style>
 </head>
@@ -269,10 +271,10 @@
 <!-- Firebase SDK -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // 1. Firebase 配置 (環境自動提供)
+    // 1. Firebase 配置
     const firebaseConfig = JSON.parse(__firebase_config);
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -293,46 +295,63 @@
         "其他": [{ name: "職業替身", note: "演技不錯，氛圍感有拍出來。" }]
     };
 
-    // 4. 初始化認證
+    // 4. 初始化認證 (修正 Rule 3)
     async function initAuth() {
         try {
-            await signInAnonymously(auth);
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    currentUser = user;
-                    document.getElementById('user-info').innerText = `雲端已連線 | 用戶ID: ${user.uid.substring(0,8)}...`;
-                    setupSync(user.uid);
-                }
-            });
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
         } catch (error) {
             console.error("Auth Error", error);
-            document.getElementById('user-info').innerText = "雲端連線失敗，目前使用離線模式";
-            loadLocalFallback();
+            document.getElementById('user-info').innerText = "雲端連線失敗，請檢查網路";
         }
     }
 
-    // 5. 雲端同步邏輯
+    // 監聽登入狀態切換
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            document.getElementById('user-info').innerText = `雲端已連線 | 用戶ID: ${user.uid}`;
+            setupSync(user.uid);
+        } else {
+            currentUser = null;
+            document.getElementById('user-info').innerText = "未登入狀態";
+        }
+    });
+
+    // 5. 雲端同步邏輯 (修正 Rule 1)
     function setupSync(uid) {
+        if (!uid) return;
         const userDocRef = doc(db, 'artifacts', appId, 'users', uid, 'notebook', 'mainData');
         
         // 即時監聽雲端數據
         onSnapshot(userDocRef, (snapshot) => {
-            if (snapshot.exists()) {
-                notebookData = snapshot.data().content || {};
+            if (snapshot.exists() && snapshot.data().content) {
+                notebookData = snapshot.data().content;
             } else {
-                // 如果是新用戶，寫入預設值
-                notebookData = defaults;
+                // 如果是新用戶或資料不見了，重新寫入預設值
+                console.log("No remote data found, restoring defaults...");
+                notebookData = JSON.parse(JSON.stringify(defaults));
                 saveToCloud();
             }
             
-            if (!currentTag || !notebookData[currentTag]) {
-                currentTag = Object.keys(notebookData)[0] || "其他";
+            // 確保有預設標籤
+            const tags = Object.keys(notebookData);
+            if (tags.length > 0) {
+                if (!currentTag || !notebookData[currentTag]) {
+                    currentTag = tags[0];
+                }
+            } else {
+                notebookData["其他"] = [];
+                currentTag = "其他";
             }
             
-            renderTabs();
-            renderButtons();
+            refreshUI();
         }, (error) => {
-            console.error("Sync Error", error);
+            console.error("Sync Error:", error);
+            document.getElementById('user-info').innerText = "讀取雲端資料失敗";
         });
     }
 
@@ -356,7 +375,12 @@
         }
     }
 
-    // 7. UI 渲染函數
+    // 7. UI 更新
+    function refreshUI() {
+        renderTabs();
+        renderButtons();
+    }
+
     window.renderTabs = function() {
         const tabsDiv = document.getElementById('tabs');
         tabsDiv.innerHTML = '';
@@ -366,8 +390,7 @@
             btn.innerText = tag;
             btn.onclick = () => {
                 currentTag = tag;
-                renderTabs();
-                renderButtons();
+                refreshUI();
             };
             tabsDiv.appendChild(btn);
         });
@@ -392,7 +415,7 @@
         grid.appendChild(addBtn);
     }
 
-    // 8. 動作處理
+    // 8. 視窗與資料動作
     window.openModal = function(index) {
         editingDramaIndex = index;
         const modal = document.getElementById('noteModal');
@@ -419,8 +442,9 @@
         const note = document.getElementById('noteContent').value;
         if (!name) return;
 
+        if (!notebookData[currentTag]) notebookData[currentTag] = [];
+
         if (editingDramaIndex === -1) {
-            if(!notebookData[currentTag]) notebookData[currentTag] = [];
             notebookData[currentTag].push({ name, note });
         } else {
             notebookData[currentTag][editingDramaIndex] = { name, note };
@@ -444,12 +468,17 @@
             notebookData[name] = [];
             currentTag = name;
             saveToCloud();
+        } else if (notebookData[name]) {
+            alert('此分類已存在');
         }
     }
 
     window.deleteCurrentTag = function() {
-        if (Object.keys(notebookData).length <= 1) return;
-        if (confirm(`確定要刪除「${currentTag}」嗎？`)) {
+        if (Object.keys(notebookData).length <= 1) {
+            alert('至少需要保留一個分類');
+            return;
+        }
+        if (confirm(`確定要刪除「${currentTag}」及其所有紀錄嗎？`)) {
             delete notebookData[currentTag];
             currentTag = Object.keys(notebookData)[0];
             saveToCloud();
