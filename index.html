@@ -238,6 +238,15 @@
             display: none;
             z-index: 3000;
         }
+
+        .rescue-btn {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            font-size: 10px;
+            opacity: 0.3;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -249,7 +258,7 @@
     <h1 class="handwritten">泰蘭德劇場</h1>
     
     <div id="user-info" class="status-bar mb-4">
-        正在尋找你的筆記本...
+        正在連線至泰國資料庫...
     </div>
 
     <div id="tabs" class="tabs-container">
@@ -266,6 +275,8 @@
         <button onclick="addNewTag()" class="action-btn primary-btn">+ 新增 CP 分類</button>
         <button onclick="deleteCurrentTag()" class="action-btn cancel-btn">刪除目前分類</button>
     </div>
+
+    <div class="rescue-btn" onclick="forceRescue()">救援工具</div>
 </div>
 
 <div id="noteModal" class="modal-overlay">
@@ -286,19 +297,18 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     const firebaseConfig = JSON.parse(__firebase_config);
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'thailand-notebook-v20';
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'thailand-notebook-final';
 
     let notebookData = {};
     let currentTag = "";
     let editingDramaIndex = -1;
     let currentUser = null;
-    let isInitialized = false;
 
     const defaults = {
         "Off&Gun": [{ name: "愛情理論", note: "10分!! 經典校園虐戀~ 前期虐滾寶後期虐關大爺" }],
@@ -307,6 +317,14 @@
         "其他": [{ name: "職業替身", note: "演技不錯，氛圍感有拍出來。" }]
     };
 
+    // 強制初始化資料
+    function initDataWithDefaults() {
+        notebookData = JSON.parse(JSON.stringify(defaults));
+        currentTag = Object.keys(notebookData)[0];
+        refreshUI();
+    }
+
+    // 初始化認證
     async function initAuth() {
         try {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -316,54 +334,58 @@
             }
         } catch (error) {
             console.error("Auth Error", error);
-            document.getElementById('user-info').innerText = "連線失敗，請嘗試重新整理";
+            document.getElementById('user-info').innerText = "離線模式（連線失敗）";
+            initDataWithDefaults();
         }
     }
 
     onAuthStateChanged(auth, (user) => {
         if (user) {
             currentUser = user;
-            document.getElementById('user-info').innerText = `雲端同步中 | 用戶: ${user.uid.substring(0,8)}`;
+            document.getElementById('user-info').innerText = `雲端已連線 | ${user.uid.substring(0,8)}`;
             setupSync(user.uid);
         }
     });
 
     function setupSync(uid) {
-        if (!uid) return;
         const userDocRef = doc(db, 'artifacts', appId, 'users', uid, 'notebook', 'mainData');
         
+        // 第一次先嘗試直接抓取
         onSnapshot(userDocRef, (snapshot) => {
             if (snapshot.exists() && snapshot.data().content) {
                 notebookData = snapshot.data().content;
-                isInitialized = true;
-            } else if (!isInitialized) {
-                // 資料救援：優先檢查 localStorage
-                const localData = localStorage.getItem('thai_drama_notes');
-                if (localData) {
-                    console.log("Found local recovery data!");
-                    notebookData = JSON.parse(localData);
-                } else {
-                    console.log("No remote or local data, using defaults.");
-                    notebookData = JSON.parse(JSON.stringify(defaults));
-                }
-                saveToCloud(); // 立即同步到雲端
-                isInitialized = true;
-            }
-            
-            const tags = Object.keys(notebookData);
-            if (tags.length > 0) {
-                if (!currentTag || !notebookData[currentTag]) {
-                    currentTag = tags[0];
-                }
+                console.log("Remote data loaded.");
             } else {
-                notebookData["其他"] = [];
-                currentTag = "其他";
+                // 如果雲端沒資料，檢查本地是否有舊緩存
+                const localBackup = localStorage.getItem('thai_drama_notes_backup');
+                if (localBackup) {
+                    notebookData = JSON.parse(localBackup);
+                    console.log("Restored from local backup.");
+                } else {
+                    notebookData = JSON.parse(JSON.stringify(defaults));
+                    console.log("No data found, used defaults.");
+                }
+                saveToCloud(); // 立即上傳確保雲端不再是空
             }
             
+            updateCurrentTagAfterSync();
             refreshUI();
         }, (error) => {
-            console.error("Sync Error:", error);
+            console.error("Sync error", error);
+            initDataWithDefaults();
         });
+    }
+
+    function updateCurrentTagAfterSync() {
+        const tags = Object.keys(notebookData);
+        if (tags.length > 0) {
+            if (!currentTag || !notebookData[currentTag]) {
+                currentTag = tags[0];
+            }
+        } else {
+            notebookData["其他"] = [];
+            currentTag = "其他";
+        }
     }
 
     async function saveToCloud() {
@@ -371,15 +393,14 @@
         document.getElementById('syncing-indicator').style.display = 'block';
         
         try {
-            // 同時存一份到本地當備份，以防萬一
-            localStorage.setItem('thai_drama_notes', JSON.stringify(notebookData));
+            // 本地也存一份備份
+            localStorage.setItem('thai_drama_notes_backup', JSON.stringify(notebookData));
             
             const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notebook', 'mainData');
             await setDoc(userDocRef, { 
                 content: notebookData,
                 lastUpdated: new Date().getTime()
             });
-            
             showSaveConfirm();
         } catch (error) {
             console.error("Save Error", error);
@@ -388,10 +409,20 @@
         }
     }
 
+    // 強制救援功能
+    window.forceRescue = function() {
+        const input = prompt("請輸入 'RESCUE' 以強制重設筆記本並載入預設資料（如果你的筆記真的卡死或不見了）：");
+        if (input === 'RESCUE') {
+            initDataWithDefaults();
+            saveToCloud();
+            alert("已強制重設！");
+        }
+    }
+
     function showSaveConfirm() {
         const tip = document.getElementById('save-confirm');
         tip.style.display = 'block';
-        setTimeout(() => tip.style.display = 'none', 2000);
+        setTimeout(() => tip.style.display = 'none', 1500);
     }
 
     function refreshUI() {
