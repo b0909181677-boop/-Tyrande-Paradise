@@ -225,17 +225,31 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             z-index: 2000;
         }
+
+        #save-confirm {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #4caf50;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 30px;
+            display: none;
+            z-index: 3000;
+        }
     </style>
 </head>
 <body>
 
 <div id="syncing-indicator">同步中...</div>
+<div id="save-confirm">✅ 已成功儲存至雲端</div>
 
 <div class="notebook-container">
     <h1 class="handwritten">泰蘭德劇場</h1>
     
     <div id="user-info" class="status-bar mb-4">
-        載入雲端服務中...
+        正在尋找你的筆記本...
     </div>
 
     <div id="tabs" class="tabs-container">
@@ -274,20 +288,18 @@
     import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // 1. Firebase 配置
     const firebaseConfig = JSON.parse(__firebase_config);
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'thailand-notebook-v20';
 
-    // 2. 應用狀態
     let notebookData = {};
     let currentTag = "";
     let editingDramaIndex = -1;
     let currentUser = null;
+    let isInitialized = false;
 
-    // 3. 預設資料
     const defaults = {
         "Off&Gun": [{ name: "愛情理論", note: "10分!! 經典校園虐戀~ 前期虐滾寶後期虐關大爺" }],
         "Tay&New": [{ name: "櫻桃魔法", note: "8分! 日漫改編得很成功!" }],
@@ -295,7 +307,6 @@
         "其他": [{ name: "職業替身", note: "演技不錯，氛圍感有拍出來。" }]
     };
 
-    // 4. 初始化認證 (修正 Rule 3)
     async function initAuth() {
         try {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -305,39 +316,40 @@
             }
         } catch (error) {
             console.error("Auth Error", error);
-            document.getElementById('user-info').innerText = "雲端連線失敗，請檢查網路";
+            document.getElementById('user-info').innerText = "連線失敗，請嘗試重新整理";
         }
     }
 
-    // 監聽登入狀態切換
     onAuthStateChanged(auth, (user) => {
         if (user) {
             currentUser = user;
-            document.getElementById('user-info').innerText = `雲端已連線 | 用戶ID: ${user.uid}`;
+            document.getElementById('user-info').innerText = `雲端同步中 | 用戶: ${user.uid.substring(0,8)}`;
             setupSync(user.uid);
-        } else {
-            currentUser = null;
-            document.getElementById('user-info').innerText = "未登入狀態";
         }
     });
 
-    // 5. 雲端同步邏輯 (修正 Rule 1)
     function setupSync(uid) {
         if (!uid) return;
         const userDocRef = doc(db, 'artifacts', appId, 'users', uid, 'notebook', 'mainData');
         
-        // 即時監聽雲端數據
         onSnapshot(userDocRef, (snapshot) => {
             if (snapshot.exists() && snapshot.data().content) {
                 notebookData = snapshot.data().content;
-            } else {
-                // 如果是新用戶或資料不見了，重新寫入預設值
-                console.log("No remote data found, restoring defaults...");
-                notebookData = JSON.parse(JSON.stringify(defaults));
-                saveToCloud();
+                isInitialized = true;
+            } else if (!isInitialized) {
+                // 資料救援：優先檢查 localStorage
+                const localData = localStorage.getItem('thai_drama_notes');
+                if (localData) {
+                    console.log("Found local recovery data!");
+                    notebookData = JSON.parse(localData);
+                } else {
+                    console.log("No remote or local data, using defaults.");
+                    notebookData = JSON.parse(JSON.stringify(defaults));
+                }
+                saveToCloud(); // 立即同步到雲端
+                isInitialized = true;
             }
             
-            // 確保有預設標籤
             const tags = Object.keys(notebookData);
             if (tags.length > 0) {
                 if (!currentTag || !notebookData[currentTag]) {
@@ -351,31 +363,37 @@
             refreshUI();
         }, (error) => {
             console.error("Sync Error:", error);
-            document.getElementById('user-info').innerText = "讀取雲端資料失敗";
         });
     }
 
-    // 6. 儲存到雲端
     async function saveToCloud() {
         if (!currentUser) return;
         document.getElementById('syncing-indicator').style.display = 'block';
         
         try {
+            // 同時存一份到本地當備份，以防萬一
+            localStorage.setItem('thai_drama_notes', JSON.stringify(notebookData));
+            
             const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notebook', 'mainData');
             await setDoc(userDocRef, { 
                 content: notebookData,
                 lastUpdated: new Date().getTime()
             });
+            
+            showSaveConfirm();
         } catch (error) {
             console.error("Save Error", error);
         } finally {
-            setTimeout(() => {
-                document.getElementById('syncing-indicator').style.display = 'none';
-            }, 500);
+            document.getElementById('syncing-indicator').style.display = 'none';
         }
     }
 
-    // 7. UI 更新
+    function showSaveConfirm() {
+        const tip = document.getElementById('save-confirm');
+        tip.style.display = 'block';
+        setTimeout(() => tip.style.display = 'none', 2000);
+    }
+
     function refreshUI() {
         renderTabs();
         renderButtons();
@@ -415,7 +433,6 @@
         grid.appendChild(addBtn);
     }
 
-    // 8. 視窗與資料動作
     window.openModal = function(index) {
         editingDramaIndex = index;
         const modal = document.getElementById('noteModal');
@@ -468,24 +485,18 @@
             notebookData[name] = [];
             currentTag = name;
             saveToCloud();
-        } else if (notebookData[name]) {
-            alert('此分類已存在');
         }
     }
 
     window.deleteCurrentTag = function() {
-        if (Object.keys(notebookData).length <= 1) {
-            alert('至少需要保留一個分類');
-            return;
-        }
-        if (confirm(`確定要刪除「${currentTag}」及其所有紀錄嗎？`)) {
+        if (Object.keys(notebookData).length <= 1) return;
+        if (confirm(`確定要刪除「${currentTag}」嗎？`)) {
             delete notebookData[currentTag];
             currentTag = Object.keys(notebookData)[0];
             saveToCloud();
         }
     }
 
-    // 啟動應用
     initAuth();
 </script>
 
