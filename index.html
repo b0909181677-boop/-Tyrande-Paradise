@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>泰蘭德劇場手寫筆記本 - 雲端版</title>
+    <title>泰蘭德劇場手寫筆記本 - 穩定同步版</title>
     <!-- 引入手寫風格字體 -->
     <link href="https://fonts.googleapis.com/css2?family=Zhi+Mang+Xing&family=Ma+Shan+Zheng&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -213,19 +213,6 @@
             opacity: 0.7;
         }
 
-        #syncing-indicator {
-            display: none;
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background: white;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            z-index: 2000;
-        }
-
         #save-confirm {
             position: fixed;
             bottom: 20px;
@@ -238,27 +225,17 @@
             display: none;
             z-index: 3000;
         }
-
-        .rescue-btn {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            font-size: 10px;
-            opacity: 0.3;
-            cursor: pointer;
-        }
     </style>
 </head>
 <body>
 
-<div id="syncing-indicator">同步中...</div>
-<div id="save-confirm">✅ 已成功儲存至雲端</div>
+<div id="save-confirm">✅ 已同步至雲端</div>
 
 <div class="notebook-container">
     <h1 class="handwritten">泰蘭德劇場</h1>
     
     <div id="user-info" class="status-bar mb-4">
-        正在連線至泰國資料庫...
+        載入中...
     </div>
 
     <div id="tabs" class="tabs-container">
@@ -272,11 +249,9 @@
     </div>
 
     <div class="tag-manager pt-8 mt-10 border-t border-[#e8dfc4] flex justify-center gap-4">
-        <button onclick="addNewTag()" class="action-btn primary-btn">+ 新增 CP 分類</button>
-        <button onclick="deleteCurrentTag()" class="action-btn cancel-btn">刪除目前分類</button>
+        <button onclick="addNewTag()" class="action-btn primary-btn">+ 新增分類</button>
+        <button onclick="deleteCurrentTag()" class="action-btn cancel-btn">刪除分類</button>
     </div>
-
-    <div class="rescue-btn" onclick="forceRescue()">救援工具</div>
 </div>
 
 <div id="noteModal" class="modal-overlay">
@@ -284,154 +259,44 @@
         <div class="modal-header">
             <input id="editDramaName" type="text" placeholder="劇名">
         </div>
-        <textarea id="noteContent" placeholder="在此寫下你的追劇心得與筆記..."></textarea>
+        <textarea id="noteContent" placeholder="在此寫下追劇筆記..."></textarea>
         <div class="btn-group">
             <button onclick="deleteDrama()" class="action-btn danger-btn">刪除</button>
             <button onclick="closeModal()" class="action-btn cancel-btn">關閉</button>
-            <button onclick="saveNote()" class="action-btn primary-btn">儲存到雲端</button>
+            <button onclick="saveNote()" class="action-btn primary-btn">儲存筆記</button>
         </div>
     </div>
 </div>
 
-<!-- Firebase SDK -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     const firebaseConfig = JSON.parse(__firebase_config);
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'thailand-notebook-final';
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'thailand-notebook-v3';
 
-    let notebookData = {};
-    let currentTag = "";
+    // 1. 設定預設資料
+    const defaults = {
+        "Off&Gun": [{ name: "愛情理論", note: "經典虐戀。" }],
+        "Tay&New": [{ name: "櫻桃魔法", note: "甜度滿分。" }],
+        "Pound&Phwin": [{ name: "We Are", note: "校園群像。" }],
+        "其他": []
+    };
+
+    let notebookData = JSON.parse(JSON.stringify(defaults));
+    let currentTag = "Off&Gun";
     let editingDramaIndex = -1;
     let currentUser = null;
 
-    const defaults = {
-        "Off&Gun": [{ name: "愛情理論", note: "10分!! 經典校園虐戀~ 前期虐滾寶後期虐關大爺" }],
-        "Tay&New": [{ name: "櫻桃魔法", note: "8分! 日漫改編得很成功!" }],
-        "Pound&Phwin": [{ name: "We Are/相愛的我們", note: "9分! 大型群像甜寵" }],
-        "其他": [{ name: "職業替身", note: "演技不錯，氛圍感有拍出來。" }]
-    };
-
-    // 強制初始化資料
-    function initDataWithDefaults() {
-        notebookData = JSON.parse(JSON.stringify(defaults));
-        currentTag = Object.keys(notebookData)[0];
-        refreshUI();
-    }
-
-    // 初始化認證
-    async function initAuth() {
-        try {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
-            }
-        } catch (error) {
-            console.error("Auth Error", error);
-            document.getElementById('user-info').innerText = "離線模式（連線失敗）";
-            initDataWithDefaults();
-        }
-    }
-
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            currentUser = user;
-            document.getElementById('user-info').innerText = `雲端已連線 | ${user.uid.substring(0,8)}`;
-            setupSync(user.uid);
-        }
-    });
-
-    function setupSync(uid) {
-        const userDocRef = doc(db, 'artifacts', appId, 'users', uid, 'notebook', 'mainData');
-        
-        // 第一次先嘗試直接抓取
-        onSnapshot(userDocRef, (snapshot) => {
-            if (snapshot.exists() && snapshot.data().content) {
-                notebookData = snapshot.data().content;
-                console.log("Remote data loaded.");
-            } else {
-                // 如果雲端沒資料，檢查本地是否有舊緩存
-                const localBackup = localStorage.getItem('thai_drama_notes_backup');
-                if (localBackup) {
-                    notebookData = JSON.parse(localBackup);
-                    console.log("Restored from local backup.");
-                } else {
-                    notebookData = JSON.parse(JSON.stringify(defaults));
-                    console.log("No data found, used defaults.");
-                }
-                saveToCloud(); // 立即上傳確保雲端不再是空
-            }
-            
-            updateCurrentTagAfterSync();
-            refreshUI();
-        }, (error) => {
-            console.error("Sync error", error);
-            initDataWithDefaults();
-        });
-    }
-
-    function updateCurrentTagAfterSync() {
-        const tags = Object.keys(notebookData);
-        if (tags.length > 0) {
-            if (!currentTag || !notebookData[currentTag]) {
-                currentTag = tags[0];
-            }
-        } else {
-            notebookData["其他"] = [];
-            currentTag = "其他";
-        }
-    }
-
-    async function saveToCloud() {
-        if (!currentUser) return;
-        document.getElementById('syncing-indicator').style.display = 'block';
-        
-        try {
-            // 本地也存一份備份
-            localStorage.setItem('thai_drama_notes_backup', JSON.stringify(notebookData));
-            
-            const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notebook', 'mainData');
-            await setDoc(userDocRef, { 
-                content: notebookData,
-                lastUpdated: new Date().getTime()
-            });
-            showSaveConfirm();
-        } catch (error) {
-            console.error("Save Error", error);
-        } finally {
-            document.getElementById('syncing-indicator').style.display = 'none';
-        }
-    }
-
-    // 強制救援功能
-    window.forceRescue = function() {
-        const input = prompt("請輸入 'RESCUE' 以強制重設筆記本並載入預設資料（如果你的筆記真的卡死或不見了）：");
-        if (input === 'RESCUE') {
-            initDataWithDefaults();
-            saveToCloud();
-            alert("已強制重設！");
-        }
-    }
-
-    function showSaveConfirm() {
-        const tip = document.getElementById('save-confirm');
-        tip.style.display = 'block';
-        setTimeout(() => tip.style.display = 'none', 1500);
-    }
-
-    function refreshUI() {
-        renderTabs();
-        renderButtons();
-    }
-
+    // --- UI 渲染邏輯定義 ---
+    
     window.renderTabs = function() {
         const tabsDiv = document.getElementById('tabs');
+        if (!tabsDiv) return;
         tabsDiv.innerHTML = '';
         Object.keys(notebookData).forEach(tag => {
             const btn = document.createElement('div');
@@ -439,30 +304,38 @@
             btn.innerText = tag;
             btn.onclick = () => {
                 currentTag = tag;
-                refreshUI();
+                window.refreshUI();
             };
             tabsDiv.appendChild(btn);
         });
-    }
+    };
 
     window.renderButtons = function() {
         const grid = document.getElementById('buttonsGrid');
+        if (!grid) return;
         grid.innerHTML = '';
         const dramas = notebookData[currentTag] || [];
         dramas.forEach((drama, index) => {
             const btn = document.createElement('button');
             btn.className = 'drama-btn';
             btn.innerText = drama.name;
-            btn.onclick = () => openModal(index);
+            btn.onclick = () => window.openModal(index);
             grid.appendChild(btn);
         });
         
         const addBtn = document.createElement('button');
         addBtn.className = 'add-action-btn';
         addBtn.innerText = '+ 新增劇目';
-        addBtn.onclick = () => openModal(-1);
+        addBtn.onclick = () => window.openModal(-1);
         grid.appendChild(addBtn);
-    }
+    };
+
+    window.refreshUI = function() {
+        window.renderTabs();
+        window.renderButtons();
+    };
+
+    // --- 互動邏輯定義 ---
 
     window.openModal = function(index) {
         editingDramaIndex = index;
@@ -479,11 +352,11 @@
             contentArea.value = data.note || '';
         }
         modal.style.display = 'flex';
-    }
+    };
 
     window.closeModal = function() {
         document.getElementById('noteModal').style.display = 'none';
-    }
+    };
 
     window.saveNote = function() {
         const name = document.getElementById('editDramaName').value.trim();
@@ -498,37 +371,106 @@
             notebookData[currentTag][editingDramaIndex] = { name, note };
         }
         saveToCloud();
-        closeModal();
-    }
+        window.closeModal();
+        window.refreshUI();
+    };
 
     window.deleteDrama = function() {
-        if (editingDramaIndex === -1) { closeModal(); return; }
+        if (editingDramaIndex === -1) { window.closeModal(); return; }
         if (confirm('確定要撕掉這頁紀錄嗎？')) {
             notebookData[currentTag].splice(editingDramaIndex, 1);
             saveToCloud();
-            closeModal();
+            window.closeModal();
+            window.refreshUI();
         }
-    }
+    };
 
     window.addNewTag = function() {
-        const name = prompt('請輸入新 CP 或分類名稱：');
+        const name = prompt('請輸入新分類名稱：');
         if (name && !notebookData[name]) {
             notebookData[name] = [];
             currentTag = name;
             saveToCloud();
+            window.refreshUI();
         }
-    }
+    };
 
     window.deleteCurrentTag = function() {
-        if (Object.keys(notebookData).length <= 1) return;
+        if (Object.keys(notebookData).length <= 1) {
+            alert("至少需保留一個分類。");
+            return;
+        }
         if (confirm(`確定要刪除「${currentTag}」嗎？`)) {
             delete notebookData[currentTag];
             currentTag = Object.keys(notebookData)[0];
             saveToCloud();
+            window.refreshUI();
+        }
+    };
+
+    async function saveToCloud() {
+        if (!currentUser) return;
+        try {
+            const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notebook', 'mainData');
+            await setDoc(userDocRef, { 
+                content: notebookData,
+                updatedAt: Date.now()
+            });
+            showSaveConfirm();
+        } catch (e) {
+            console.error("Save error:", e);
         }
     }
 
+    function showSaveConfirm() {
+        const tip = document.getElementById('save-confirm');
+        if (tip) {
+            tip.style.display = 'block';
+            setTimeout(() => tip.style.display = 'none', 1000);
+        }
+    }
+
+    // --- 初始化執行 ---
+    
+    // 啟動時先渲染預設畫面
+    window.refreshUI();
+
+    const initAuth = async () => {
+        try {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+        } catch (e) {
+            console.error(e);
+            document.getElementById('user-info').innerText = "離線模式";
+        }
+    };
+
     initAuth();
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            document.getElementById('user-info').innerText = `已連線 | ${user.uid.substring(0,8)}`;
+            
+            const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'notebook', 'mainData');
+            onSnapshot(userDocRef, (docSnap) => {
+                if (docSnap.exists() && docSnap.data().content) {
+                    notebookData = docSnap.data().content;
+                    if (!notebookData[currentTag]) {
+                        currentTag = Object.keys(notebookData)[0] || "其他";
+                    }
+                    window.refreshUI();
+                } else {
+                    saveToCloud();
+                }
+            }, (err) => {
+                console.error("Snapshot error:", err);
+            });
+        }
+    });
 </script>
 
 </body>
